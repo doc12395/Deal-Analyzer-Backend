@@ -13,21 +13,32 @@ const API_KEY = process.env.ANTHROPIC_API_KEY;
 app.post('/api/analyze', async (req, res) => {
   try {
     const { address } = req.body;
-    if (!address) {
-      return res.status(400).json({ error: 'Address required' });
+    
+    if (!address || typeof address !== 'string') {
+      return res.status(400).json({ error: 'Address is required and must be a string' });
     }
 
     const prompt = `You are a real estate development analyst for Charleston, SC. Analyze this property: ${address}
 
-Search for and find:
-1. TMS/parcel number, lot size, owner from county records
-2. Base zoning code and all overlay districts from City of Charleston GIS
-3. FEMA flood zone designation
-4. Permitted uses from Charleston municode for that zoning
-5. Recent land sale comps in same zip code
-6. Recent new construction sales in area
+Use web search to find:
+1. Parcel TMS/PID, lot size in acres and sq ft, owner, county use class
+2. Base zoning code and overlay districts
+3. FEMA flood zone
+4. Permitted uses from zoning ordinance
+5. Recent land sale comps (last 24 months)
+6. New construction sales (DRB, Lennar, etc)
 
-Return ONLY valid JSON with parcel, zoning, flood, permittedUses, landComps, newConstruction, summary, and directLinks fields.`;
+Return ONLY valid JSON (no markdown):
+{
+  "parcel": {"tms": "", "acreage": "", "lotSizeSqFt": "", "countyUse": "", "municipality": ""},
+  "zoning": {"designation": "", "overlayDistrict": "", "historicDistrict": "", "maxHeight": ""},
+  "flood": {"femaZone": "", "riskLevel": "", "constructionImpact": ""},
+  "permittedUses": {"byRight": [], "conditional": [], "maxDensity": ""},
+  "landComps": [],
+  "newConstruction": [],
+  "summary": "2-3 sentence plain English summary",
+  "directLinks": {"countyGIS": "https://gisccweb.charlestoncounty.org/public_search/", "cityZoning": "https://gis.charleston-sc.gov/interactive/zoning/", "femaFlood": "https://msc.fema.gov/portal/search"}
+}`;
 
     const response = await fetch(ANTHROPIC_API, {
       method: 'POST',
@@ -38,15 +49,17 @@ Return ONLY valid JSON with parcel, zoning, flood, permittedUses, landComps, new
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 3000,
+        max_tokens: 2000,
         messages: [{ role: 'user', content: prompt }],
         tools: [{ type: 'web_search_20250305', name: 'web_search' }]
       })
     });
 
     const data = await response.json();
+    
     if (data.error) {
-      return res.status(500).json({ error: data.error.message });
+      console.error('API Error:', data.error);
+      return res.status(500).json({ error: data.error.message || 'API request failed' });
     }
 
     const text = data.content
@@ -59,15 +72,15 @@ Return ONLY valid JSON with parcel, zoning, flood, permittedUses, landComps, new
     const end = clean.lastIndexOf('}');
     
     if (start === -1 || end === -1) {
-      return res.status(500).json({ error: 'Could not parse analysis' });
+      return res.status(500).json({ error: 'Could not parse response as JSON' });
     }
 
     const analysis = JSON.parse(clean.substring(start, end + 1));
     res.json(analysis);
 
   } catch (error) {
-    console.error('Error:', error);
-    res.status(500).json({ error: error.message });
+    console.error('Server Error:', error.message);
+    res.status(500).json({ error: error.message || 'Internal server error' });
   }
 });
 

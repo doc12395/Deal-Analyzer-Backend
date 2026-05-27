@@ -11,7 +11,8 @@ console.log('Server starting...');
 console.log('API_KEY exists:', !!process.env.ANTHROPIC_API_KEY);
 
 const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages';
-const API_KEY = process.env.ANTHROPIC_API_KEY;
+const API_KEY = process.env.ANTHROPIC_API_KEY || 'sk-test';
+console.log('API_KEY value starts with:', API_KEY.substring(0, 10));
 
 app.post('/api/analyze', async (req, res) => {
   console.log('=== REQUEST RECEIVED ===');

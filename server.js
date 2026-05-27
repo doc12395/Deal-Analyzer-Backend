@@ -12,7 +12,7 @@ const API_KEY = process.env.ANTHROPIC_API_KEY;
 
 app.post('/api/analyze', async (req, res) => {
   try {
-    const { address } = req.body;
+    console.log('Request body:', JSON.stringify(req.body));
     
     if (!address || typeof address !== 'string') {
       return res.status(400).json({ error: 'Address is required and must be a string' });

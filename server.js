@@ -12,33 +12,28 @@ const API_KEY = process.env.ANTHROPIC_API_KEY;
 
 app.post('/api/analyze', async (req, res) => {
   try {
-    console.log('Request body:', JSON.stringify(req.body));
+    console.log('Received request body:', JSON.stringify(req.body));
     
-    if (!address || typeof address !== 'string') {
-      return res.status(400).json({ error: 'Address is required and must be a string' });
+    const addr = req.body.address;
+    
+    if (!addr) {
+      console.log('Error: address field missing');
+      return res.status(400).json({ error: 'address field is required' });
     }
 
-    const prompt = `You are a real estate development analyst for Charleston, SC. Analyze this property: ${address}
+    console.log('Analyzing address:', addr);
+
+    const prompt = `You are a real estate development analyst for Charleston, SC. Analyze this property: ${addr}
 
 Use web search to find:
 1. Parcel TMS/PID, lot size in acres and sq ft, owner, county use class
-2. Base zoning code and overlay districts
+2. Base zoning code and overlay districts  
 3. FEMA flood zone
 4. Permitted uses from zoning ordinance
 5. Recent land sale comps (last 24 months)
 6. New construction sales (DRB, Lennar, etc)
 
-Return ONLY valid JSON (no markdown):
-{
-  "parcel": {"tms": "", "acreage": "", "lotSizeSqFt": "", "countyUse": "", "municipality": ""},
-  "zoning": {"designation": "", "overlayDistrict": "", "historicDistrict": "", "maxHeight": ""},
-  "flood": {"femaZone": "", "riskLevel": "", "constructionImpact": ""},
-  "permittedUses": {"byRight": [], "conditional": [], "maxDensity": ""},
-  "landComps": [],
-  "newConstruction": [],
-  "summary": "2-3 sentence plain English summary",
-  "directLinks": {"countyGIS": "https://gisccweb.charlestoncounty.org/public_search/", "cityZoning": "https://gis.charleston-sc.gov/interactive/zoning/", "femaFlood": "https://msc.fema.gov/portal/search"}
-}`;
+Return ONLY valid JSON with parcel, zoning, flood, permittedUses, landComps, newConstruction, summary, directLinks fields.`;
 
     const response = await fetch(ANTHROPIC_API, {
       method: 'POST',
@@ -58,8 +53,8 @@ Return ONLY valid JSON (no markdown):
     const data = await response.json();
     
     if (data.error) {
-      console.error('API Error:', data.error);
-      return res.status(500).json({ error: data.error.message || 'API request failed' });
+      console.error('API error:', data.error);
+      return res.status(500).json({ error: data.error.message || 'API error' });
     }
 
     const text = data.content
@@ -72,15 +67,16 @@ Return ONLY valid JSON (no markdown):
     const end = clean.lastIndexOf('}');
     
     if (start === -1 || end === -1) {
-      return res.status(500).json({ error: 'Could not parse response as JSON' });
+      console.error('Could not parse JSON from response');
+      return res.status(500).json({ error: 'Could not parse response' });
     }
 
     const analysis = JSON.parse(clean.substring(start, end + 1));
     res.json(analysis);
 
   } catch (error) {
-    console.error('Server Error:', error.message);
-    res.status(500).json({ error: error.message || 'Internal server error' });
+    console.error('Server error:', error.message);
+    res.status(500).json({ error: error.message });
   }
 });
 

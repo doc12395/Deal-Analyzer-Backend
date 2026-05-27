@@ -7,33 +7,32 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+console.log('Server starting...');
+console.log('API_KEY exists:', !!process.env.ANTHROPIC_API_KEY);
+
 const ANTHROPIC_API = 'https://api.anthropic.com/v1/messages';
 const API_KEY = process.env.ANTHROPIC_API_KEY;
 
 app.post('/api/analyze', async (req, res) => {
+  console.log('=== REQUEST RECEIVED ===');
+  console.log('Body type:', typeof req.body);
+  console.log('Body keys:', Object.keys(req.body));
+  console.log('Full body:', JSON.stringify(req.body));
+  
   try {
-    console.log('Received request body:', JSON.stringify(req.body));
-    
     const addr = req.body.address;
+    console.log('Extracted address:', addr);
     
-    if (!addr) {
-      console.log('Error: address field missing');
-      return res.status(400).json({ error: 'address field is required' });
+    if (!addr || typeof addr !== 'string') {
+      console.log('Address validation failed');
+      return res.status(400).json({ error: 'Valid address required' });
     }
 
-    console.log('Analyzing address:', addr);
+    console.log('Creating prompt for:', addr);
 
-    const prompt = `You are a real estate development analyst for Charleston, SC. Analyze this property: ${addr}
+    const prompt = `Analyze this Charleston SC property: ${addr}. Return JSON only with: parcel (tms, acreage, lotSizeSqFt, countyUse), zoning (designation, overlayDistrict, maxHeight), flood (femaZone, riskLevel), permittedUses (byRight, maxDensity), summary, directLinks.`;
 
-Use web search to find:
-1. Parcel TMS/PID, lot size in acres and sq ft, owner, county use class
-2. Base zoning code and overlay districts  
-3. FEMA flood zone
-4. Permitted uses from zoning ordinance
-5. Recent land sale comps (last 24 months)
-6. New construction sales (DRB, Lennar, etc)
-
-Return ONLY valid JSON with parcel, zoning, flood, permittedUses, landComps, newConstruction, summary, directLinks fields.`;
+    console.log('Calling Anthropic API...');
 
     const response = await fetch(ANTHROPIC_API, {
       method: 'POST',
@@ -50,11 +49,14 @@ Return ONLY valid JSON with parcel, zoning, flood, permittedUses, landComps, new
       })
     });
 
+    console.log('API response status:', response.status);
+
     const data = await response.json();
+    console.log('API response keys:', Object.keys(data));
     
     if (data.error) {
-      console.error('API error:', data.error);
-      return res.status(500).json({ error: data.error.message || 'API error' });
+      console.error('API returned error:', data.error);
+      return res.status(500).json({ error: data.error.message });
     }
 
     const text = data.content
@@ -66,16 +68,20 @@ Return ONLY valid JSON with parcel, zoning, flood, permittedUses, landComps, new
     const start = clean.indexOf('{');
     const end = clean.lastIndexOf('}');
     
+    console.log('Parsing JSON from positions', start, 'to', end);
+
     if (start === -1 || end === -1) {
-      console.error('Could not parse JSON from response');
-      return res.status(500).json({ error: 'Could not parse response' });
+      console.error('JSON not found in response');
+      return res.status(500).json({ error: 'Invalid response format' });
     }
 
     const analysis = JSON.parse(clean.substring(start, end + 1));
+    console.log('Success! Returning analysis');
     res.json(analysis);
 
   } catch (error) {
-    console.error('Server error:', error.message);
+    console.error('EXCEPTION:', error.name, error.message);
+    console.error('Stack:', error.stack);
     res.status(500).json({ error: error.message });
   }
 });
